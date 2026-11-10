@@ -6,7 +6,7 @@
 <title>Rádio Love Gospel</title>
 
 <!-- ================================================================
-     RÁDIO LOVE GOSPEL — VERSÃO 11
+     RÁDIO LOVE GOSPEL — VERSÃO 12
 
      Este arquivo tem 5 partes, nesta ordem:
 
@@ -46,8 +46,7 @@
   // Cole abaixo, entre as aspas, o link direto do arquivo .mp4
   // (por exemplo, o link público do Firebase Storage).
   // ---------------------------------------------------------------
-    var VIDEO_URL = "https://growcet2024.github.io/radio-love-gospel/video.mp4";
-
+  var VIDEO_URL = "https://growcet2024.github.io/radio-love-gospel/video.mp4";
 
 
   // ---------------------------------------------------------------
@@ -541,7 +540,12 @@
     );
   }
 
-  /* Primeiro quadro do vídeo, na altura completa do quadrado */
+  /* A amostra inteira é clicável: toque para assistir, pausar ou rever */
+  .video-share {
+    cursor: pointer;
+  }
+
+  /* Primeiro quadro do vídeo (capa), na altura completa do quadrado */
   .video-share img {
     position: absolute;
     top: 0;
@@ -553,26 +557,80 @@
     display: block;
   }
 
-  /* Botãozinho de play no canto, para mostrar que é um vídeo */
+  /* O vídeo tocando, por cima da capa, na altura completa do quadrado.
+     As laterais continuam com o degradê azul. Começa invisível. */
+  .video-share video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: transparent;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+
+  /* Botão de play (e de rever) sobre a amostra */
   .video-share .play-mini {
     position: absolute;
-    right: 10px;
-    bottom: 10px;
-    width: 38px;
-    height: 38px;
+    top: 50%;
+    left: 50%;
+    width: 60px;
+    height: 60px;
+    margin: -30px 0 0 -30px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, .22);
-    border: 1px solid rgba(255, 255, 255, .35);
+    background: rgba(255, 255, 255, .24);
+    border: 1px solid rgba(255, 255, 255, .4);
     display: flex;
     align-items: center;
     justify-content: center;
+    z-index: 2;
+    transition: opacity .2s;
   }
 
   .video-share .play-mini svg {
-    width: 18px;
-    height: 18px;
+    width: 26px;
+    height: 26px;
     fill: var(--branco);
-    margin-left: 2px;
+  }
+
+  .video-share .play-mini .i-play {
+    margin-left: 3px;
+  }
+
+  /* Ícone de rever: só aparece quando o vídeo termina */
+  .video-share .play-mini .i-replay {
+    display: none;
+  }
+
+  /* Estado "tocando": o botão some para não atrapalhar o vídeo */
+  .estado-tocando .play-mini {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Estado "fim": o vídeo fica parado no último quadro e o botão
+     de rever vai para o cantinho, sem cobrir o ícone */
+  .estado-fim .play-mini {
+    top: auto;
+    left: auto;
+    right: 10px;
+    bottom: 10px;
+    width: 44px;
+    height: 44px;
+    margin: 0;
+  }
+
+  .estado-fim .play-mini .i-play {
+    display: none;
+  }
+
+  .estado-fim .play-mini .i-replay {
+    display: block;
+    width: 22px;
+    height: 22px;
   }
 
   /* Botão "Enviar" */
@@ -703,11 +761,15 @@
 
   <!-- Amostra do vídeo e botão, com a mesma largura -->
   <div class="conteudo-share">
-    <div class="video-share">
+    <div class="video-share estado-parado" id="videoCaixa" role="button" tabindex="0" aria-label="Assistir ao vídeo">
       <!-- A capa (primeiro quadro do vídeo) é colocada pelo SCRIPT -->
       <img id="capaVideo" alt="Vídeo da Rádio Love Gospel">
+      <!-- O vídeo que toca na própria amostra (o SCRIPT coloca o arquivo) -->
+      <video id="videoPreview" playsinline preload="auto"></video>
+      <!-- Botão de play (e de rever, no final) -->
       <div class="play-mini">
-        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="i-replay" viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
       </div>
     </div>
     <!-- Texto do botão (para trocar, edite aqui) -->
@@ -772,6 +834,7 @@
   var MSG_TOQUE_DE_NOVO = "Vídeo pronto! Toque em Enviar de novo.";
   var MSG_ERRO_SHARE = "Não foi possível compartilhar.";
   var MSG_BAIXADO = "Seu aparelho não abre o compartilhar aqui. O vídeo foi baixado.";
+  var MSG_TOQUE_PARA_ASSISTIR = "Toque de novo para assistir ao vídeo.";
 
 
   // ==============================================================
@@ -1003,9 +1066,99 @@
 
   // Começa a baixar em segundo plano quando a aba abre (assim já fica pronto)
   function iniciarVideo() {
-    if (urlVideo() && !videoBlob && !videoBaixando) {
-      baixarVideo().catch(function () {});
+    if (urlVideo()) {
+      prepararPreview().catch(function () {});
     }
+  }
+
+
+  // ----------------------------------------------------------------
+  // PREVIEW: o vídeo toca na própria amostra, dentro da aba
+  // ----------------------------------------------------------------
+  var videoCaixa = document.getElementById("videoCaixa");
+  var videoEl = document.getElementById("videoPreview");
+  var videoLocal = "";   // endereço do vídeo já baixado (para tocar sem baixar de novo)
+
+  // Estados da amostra: "parado" (capa ou pausado), "tocando" e "fim"
+  function estadoPreview(estado) {
+    videoCaixa.className = "video-share estado-" + estado;
+  }
+
+  // Coloca o vídeo baixado dentro do player da amostra
+  function prepararPreview() {
+    return baixarVideo().then(function (b) {
+      if (!videoLocal) {
+        videoLocal = URL.createObjectURL(b);
+        videoEl.src = videoLocal;
+      }
+    });
+  }
+
+  // Toca (ou refaz) o vídeo na amostra
+  function tocarPreview() {
+    if (!urlVideo()) {
+      avisoShare.textContent = MSG_SEM_VIDEO;
+      return;
+    }
+    if (!videoLocal) {
+      avisoShare.textContent = MSG_BAIXANDO;
+    }
+    prepararPreview().then(function () {
+      avisoShare.textContent = "";
+      if (videoEl.ended) {
+        videoEl.currentTime = 0;
+      }
+      // A rádio pausa sozinha para não tocar junto com o vídeo
+      if (player.classList.contains("tocando") || player.classList.contains("carregando")) {
+        pausar();
+      }
+      var p = videoEl.play();
+      if (p && p.catch) {
+        p.catch(function () {
+          estadoPreview("parado");
+          avisoShare.textContent = MSG_TOQUE_PARA_ASSISTIR;
+        });
+      }
+    }).catch(function () {
+      avisoShare.textContent = MSG_ERRO_BAIXAR;
+    });
+  }
+
+  // Toque na amostra: assiste, pausa ou rever
+  videoCaixa.addEventListener("click", function () {
+    if (videoEl.paused || videoEl.ended) {
+      tocarPreview();
+    } else {
+      videoEl.pause();
+    }
+  });
+
+  // O vídeo começou a tocar
+  videoEl.addEventListener("playing", function () {
+    videoEl.style.opacity = 1;
+    estadoPreview("tocando");
+  });
+
+  // O vídeo foi pausado no meio
+  videoEl.addEventListener("pause", function () {
+    if (!videoEl.ended) {
+      estadoPreview("parado");
+    }
+  });
+
+  // O vídeo terminou: fica parado no último quadro (dá para rever ou enviar)
+  videoEl.addEventListener("ended", function () {
+    estadoPreview("fim");
+  });
+
+  // Volta para a capa (usado ao fechar a aba)
+  function resetarPreview() {
+    videoEl.pause();
+    try {
+      videoEl.currentTime = 0;
+    } catch (e) {}
+    videoEl.style.opacity = 0;
+    estadoPreview("parado");
   }
 
 
@@ -1021,6 +1174,7 @@
   }
 
   function fecharAba() {
+    resetarPreview();
     document.body.classList.remove("share-aberto");
     aba.setAttribute("aria-hidden", "true");
   }
