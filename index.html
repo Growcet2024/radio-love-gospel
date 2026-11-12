@@ -6,11 +6,11 @@
 <title>Rádio Love Gospel</title>
 
 <!-- ================================================================
-     RÁDIO LOVE GOSPEL — VERSÃO 12
+     RÁDIO LOVE GOSPEL — VERSÃO 13
 
      Este arquivo tem 5 partes, nesta ordem:
 
-       1) CONFIGURAÇÕES   -> URL do streaming, ícone, vídeo e capa do vídeo
+       1) CONFIGURAÇÕES   -> URL do streaming, ícone, vídeo, modo Android e capa do vídeo
                              (É AQUI QUE VOCÊ COLA E TROCA)
        2) STYLE           -> cores e visual
        3) HTML            -> o que aparece na tela
@@ -21,7 +21,7 @@
 
 <!-- ################################################################
      1) CONFIGURAÇÕES
-     Só mexa nas 4 linhas que começam com "var".
+     Só mexa nas linhas que começam com "var".
      Cole o conteúdo ENTRE AS ASPAS, sem apagar as aspas nem o ponto e vírgula.
      ################################################################ -->
 <script>
@@ -47,6 +47,24 @@
   // (por exemplo, o link público do Firebase Storage).
   // ---------------------------------------------------------------
   var VIDEO_URL = "https://growcet2024.github.io/radio-love-gospel/video.mp4";
+
+
+  // ---------------------------------------------------------------
+  // NOME DO ARQUIVO AO COMPARTILHAR
+  // Escreva abaixo, entre as aspas, o nome que o vídeo terá
+  // quando a pessoa receber (termine com .mp4).
+  // ---------------------------------------------------------------
+  var NOME_ARQUIVO = "radio-love-gospel.mp4";
+
+
+  // ---------------------------------------------------------------
+  // MODO ANDROID Obs: Quando for para o android mudar de (false) para (true)
+  // Deixe false para usar no NAVEGADOR (como está agora).
+  // Quando o app Android tiver a função shareVideo, troque por true.
+  // (As instruções completas estão no "BLOCO ANDROID", lá no Script.)
+  // ---------------------------------------------------------------
+  // NO ANDROID: troque false por true na linha abaixo
+  var MODO_ANDROID = false;
 
 
   // ---------------------------------------------------------------
@@ -835,6 +853,7 @@
   var MSG_ERRO_SHARE = "Não foi possível compartilhar.";
   var MSG_BAIXADO = "Seu aparelho não abre o compartilhar aqui. O vídeo foi baixado.";
   var MSG_TOQUE_PARA_ASSISTIR = "Toque de novo para assistir ao vídeo.";
+  var MSG_PREPARANDO = "Preparando o vídeo...";   // aparece ao enviar pelo app Android
 
 
   // ==============================================================
@@ -1214,27 +1233,28 @@
 
 
   // ==============================================================
-  // 9) BOTÃO "ENVIAR"
-  // Abre o compartilhar do celular com o vídeo.
-  // Se o aparelho não permitir, baixa o vídeo.
+  // 9) COMPARTILHAR O VÍDEO (botão "Enviar")
+  // No navegador: abre o compartilhar do celular com o arquivo.
+  // No Android (MODO_ANDROID = true): entrega para o app.
+  // Se nada disso for possível, baixa o vídeo.
   // ==============================================================
 
   // Baixa o arquivo para o aparelho (plano B)
   function salvarArquivo(blob) {
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "radio-love-gospel.mp4";
+    a.download = NOME_ARQUIVO;
     document.body.appendChild(a);
     a.click();
     a.remove();
     avisoShare.textContent = MSG_BAIXADO;
   }
 
-  // Abre o compartilhar com o vídeo
-  function compartilharVideo(blob) {
+  // Abre o compartilhar do NAVEGADOR com o vídeo
+  function compartilharNoNavegador(blob) {
     var arquivo = null;
     try {
-      arquivo = new File([blob], "radio-love-gospel.mp4", { type: "video/mp4" });
+      arquivo = new File([blob], NOME_ARQUIVO, { type: "video/mp4" });
     } catch (e) {}
 
     var pode = arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] });
@@ -1257,16 +1277,83 @@
     }
   }
 
+  // Link completo do vídeo (começa com https://), usado pelo Android
+  function urlVideoCompleta() {
+    try {
+      return new URL(urlVideo(), window.location.href).href;
+    } catch (e) {
+      return urlVideo();
+    }
+  }
+
+  /* ##################################################################
+     ########   INÍCIO DO BLOCO ANDROID — AJUSTAR DEPOIS   ########
+
+     O QUE É
+       Este trecho faz o botão "Enviar" chamar o próprio app Android
+       (função shareVideo). Só funciona quando MODO_ANDROID = true
+       (lá no topo do arquivo, nas CONFIGURAÇÕES).
+
+     O QUE FAZER QUANDO FOR TESTAR NO ANDROID
+       1) No app Android (MainActivity), criar a função
+          shareVideo(url, nomeDoArquivo). O código pronto está no
+          arquivo shareVideo-android-v1.java.
+       2) Lá no topo desta página, trocar
+              var MODO_ANDROID = false;
+          por
+              var MODO_ANDROID = true;
+       3) Testar no celular. Se o botão não fizer nada no Android,
+          confira se a função shareVideo existe no app com esse nome.
+          Se não existir, a página usa o compartilhar do navegador.
+
+     OPÇÃO B (se preferir enviar o vídeo em vez do link)
+       Em vez de passar o link, a página pode converter o vídeo em
+       base64 e entregar ao app. Para isso, o app precisaria de uma
+       função shareVideoBase64(base64, nomeDoArquivo) e este trecho seria:
+
+         var leitor = new FileReader();
+         leitor.onload = function () {
+           var base64 = leitor.result.split(",")[1];
+           Android.shareVideoBase64(base64, NOME_ARQUIVO);
+         };
+         leitor.readAsDataURL(videoBlob);
+
+       (O vídeo precisa já estar baixado: videoBlob.)
+     ################################################################## */
+
+  // Chama o app Android. Devolve true se conseguiu, false se não achou a função.
+  function compartilharNoAndroid() {
+    if (typeof Android === "undefined" || typeof Android.shareVideo !== "function") {
+      return false;
+    }
+    Android.shareVideo(urlVideoCompleta(), NOME_ARQUIVO);
+    return true;
+  }
+
+  /* ########   FIM DO BLOCO ANDROID   ######## */
+
+
+  // Toque no botão "Enviar"
   btnShare.addEventListener("click", function () {
+
     // Sem link colado nas configurações
     if (!urlVideo()) {
       avisoShare.textContent = MSG_SEM_VIDEO;
       return;
     }
 
-    // Vídeo já baixado: envia na hora
+    // Modo Android: entrega para o app (se existir a função)
+    if (MODO_ANDROID && compartilharNoAndroid()) {
+      avisoShare.textContent = MSG_PREPARANDO;
+      setTimeout(function () {
+        avisoShare.textContent = "";
+      }, 4000);
+      return;
+    }
+
+    // Modo navegador: vídeo já baixado, envia na hora
     if (videoBlob) {
-      compartilharVideo(videoBlob);
+      compartilharNoNavegador(videoBlob);
       return;
     }
 
@@ -1276,7 +1363,7 @@
     baixarVideo().then(function (b) {
       btnShare.disabled = false;
       avisoShare.textContent = "";
-      compartilharVideo(b);
+      compartilharNoNavegador(b);
     }).catch(function () {
       btnShare.disabled = false;
       avisoShare.textContent = MSG_ERRO_BAIXAR;
